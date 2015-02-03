@@ -3,7 +3,7 @@ Node DDP Client
 
 A callback style [DDP](https://github.com/meteor/meteor/blob/devel/packages/livedata/DDP.md) ([Meteor](http://meteor.com/)'s Distributed Data Protocol) node client, originally based alansikora's [node-js_ddp-client](https://github.com/alansikora/node-js_ddp-client) and Meteor's python client. Uses a more callback style approach.
 
-The client implements the pre1 and pre2 versions of DDP.
+The client implements version 1 of DDP, as well as fallbacks to pre1 and pre2.
 
 Installation
 ============
@@ -14,7 +14,7 @@ Installation
 
 Authentication
 ==============
-Built-in authentication support was removed in ddp 0.7.0 due to changes in Meteor version 0.8.2. 
+Built-in authentication support was removed in ddp 0.7.0 due to changes in Meteor version 0.8.2.
 
 One can authenticate using plain-text logins as follows:
 
@@ -42,24 +42,30 @@ Please see the example in `examples/example.js`. Or here for reference:
 var DDPClient = require("ddp");
 
 var ddpclient = new DDPClient({
-  host: "localhost",
-  port: 3000,
-  /* optional: */
-  auto_reconnect: true,
-  auto_reconnect_timer: 500,
-  use_ssl: false,
-  maintain_collections: true // Set to false to maintain your own collections.
+  // All properties optional, defaults shown
+  host : "localhost",
+  port : 3000,
+  path : "websocket",
+  ssl  : false,
+  autoReconnect : true,
+  autoReconnectTimer : 500,
+  maintainCollections : true,
+  ddpVersion : '1'  // ['1', 'pre2', 'pre1'] available
 });
 
 /*
  * Connect to the Meteor Server
  */
-ddpclient.connect(function(error) {
-  // If auto_reconnect is true, this callback will be invoked each time
+ddpclient.connect(function(error, wasReconnect) {
+  // If autoReconnect is true, this callback will be invoked each time
   // a server connection is re-established
   if (error) {
     console.log('DDP connection error!');
     return;
+  }
+
+  if (wasReconnect) {
+    console.log('Reestablishment of a connection.');
   }
 
   console.log('connected!');
@@ -114,6 +120,25 @@ ddpclient.connect(function(error) {
       console.log(ddpclient.collections.posts);
     }
   );
+
+  /*
+   * Observe a collection.
+   */
+  var observer = ddpclient.observe("posts");
+  observer.added = function(id) {
+    console.log("[ADDED] to " + observer.name + ":  " + id);
+  };
+  observer.changed = function(id, oldFields, clearedFields, newFields) {
+    console.log("[CHANGED] in " + observer.name + ":  " + id);
+    console.log("[CHANGED] old field values: ", oldFields);
+    console.log("[CHANGED] cleared fields: ", clearedFields);
+    console.log("[CHANGED] new fields: ", newFields);
+  };
+  observer.removed = function(id, oldValue) {
+    console.log("[REMOVED] in " + observer.name + ":  " + id);
+    console.log("[REMOVED] previous value: ", oldValue);
+  };
+  setTimeout(function() { observer.stop() }, 6000);
 });
 
 /*
@@ -131,7 +156,7 @@ ddpclient.close();
 
 /*
  * If you need to do something specific on close or errors.
- * You can also disable auto_reconnect and
+ * You can also disable autoReconnect and
  * call ddpclient.connect() when you are ready to re-connect.
 */
 ddpclient.on('socket-close', function(code, message) {
